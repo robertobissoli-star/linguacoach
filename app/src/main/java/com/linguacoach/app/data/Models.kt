@@ -54,6 +54,9 @@ data class Settings(
     val speakReplies: Boolean = true,
     val speakCorrections: Boolean = true,
     val voiceId: String? = null,
+    /** Optional read-only GitHub token to fetch updates from a private repo. */
+    val githubToken: String = "",
+    val autoUpdate: Boolean = true,
     val onboarded: Boolean = false,
     val tutorName: String = "Alex",
     /** Avatar photo as a small base64 JPEG; null = use a preset. */

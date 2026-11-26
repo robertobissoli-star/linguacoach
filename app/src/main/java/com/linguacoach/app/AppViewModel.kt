@@ -13,6 +13,8 @@ import com.linguacoach.app.data.Scenario
 import com.linguacoach.app.data.Settings
 import com.linguacoach.app.speech.Speaker
 import com.linguacoach.app.speech.SpeechManager
+import com.linguacoach.app.update.UpdateInfo
+import com.linguacoach.app.update.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -24,8 +26,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo = ChatRepository.get(app)
     private val claude = ClaudeClient()
+    private val updater = UpdateManager()
     val speaker = Speaker(app)
     val speech = SpeechManager(app)
+
+    private val _update = MutableStateFlow<UpdateInfo?>(null)
+    val update: StateFlow<UpdateInfo?> = _update
+    private val _updateStatus = MutableStateFlow<String?>(null)
+    val updateStatus: StateFlow<String?> = _updateStatus
+
+    val versionName: String get() = updater.currentVersionName()
 
     val settings: StateFlow<Settings> = repo.settings
     val messages: StateFlow<List<ChatMessage>> = repo.messages
@@ -39,7 +49,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             settings.map { it.voiceId }.distinctUntilChanged().collect { speaker.setVoice(it) }
         }
+        // Auto-check for updates on launch (once settings have loaded).
+        viewModelScope.launch {
+            settings.map { it.onboarded to it.autoUpdate }.distinctUntilChanged().collect { (onb, auto) ->
+                if (onb && auto && _update.value == null) checkUpdates(silent = true)
+            }
+        }
     }
+
+    // ---- updates --------------------------------------------------------
+
+    fun checkUpdates(silent: Boolean) {
+        viewModelScope.launch {
+            if (!silent) _updateStatus.value = "Controllo aggiornamenti…"
+            val info = runCatching { updater.check(repo.current.githubToken) }.getOrNull()
+            _update.value = info
+            if (!silent) _updateStatus.value =
+                if (info != null) "Aggiornamento disponibile: ${info.name}"
+                else "Sei già all'ultima versione (v${updater.currentVersionCode()})."
+        }
+    }
+
+    fun installUpdate() {
+        val info = _update.value ?: return
+        viewModelScope.launch {
+            _updateStatus.value = "Scarico l'aggiornamento…"
+            try {
+                updater.downloadAndInstall(getApplication(), info, repo.current.githubToken)
+                _updateStatus.value = null
+            } catch (e: Exception) {
+                _updateStatus.value = "Errore aggiornamento: ${e.message}"
+            }
+        }
+    }
+
+    fun dismissUpdate() { _update.value = null }
+    fun setGithubToken(t: String) = repo.updateSettings { it.copy(githubToken = t.trim()) }
+    fun setAutoUpdate(on: Boolean) = repo.updateSettings { it.copy(autoUpdate = on) }
 
     private val level: Level
         get() = runCatching { Level.valueOf(repo.current.level) }.getOrDefault(Level.B1)

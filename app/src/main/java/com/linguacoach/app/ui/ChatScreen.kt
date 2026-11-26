@@ -87,6 +87,7 @@ fun ChatScreen(vm: AppViewModel) {
     val partial by vm.speech.partial.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
 
+    val update by vm.update.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var showSettings by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -175,6 +176,26 @@ fun ChatScreen(vm: AppViewModel) {
     }
 
     if (showSettings) SettingsDialog(vm, onClose = { showSettings = false })
+
+    update?.let { u ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissUpdate() },
+            title = { Text("Aggiornamento disponibile") },
+            text = {
+                Column {
+                    Text(u.name, fontWeight = FontWeight.SemiBold)
+                    if (u.notes.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(u.notes, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text("Vuoi scaricarlo e installarlo ora?", fontSize = 13.sp)
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.installUpdate() }) { Text("Scarica e installa") } },
+            dismissButton = { TextButton(onClick = { vm.dismissUpdate() }) { Text("Più tardi") } },
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -358,7 +379,26 @@ private fun SettingsDialog(vm: AppViewModel, onClose: () -> Unit) {
                     label = { Text("Chiave API") }, singleLine = true,
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(14.dp))
+
+                // --- Aggiornamenti da GitHub ---
+                val updateStatus by vm.updateStatus.collectAsStateWithLifecycle()
+                var token by remember { mutableStateOf(settings.githubToken) }
+                Text("Aggiornamenti", fontWeight = FontWeight.SemiBold)
+                Text("Versione installata: ${vm.versionName}", fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Controlla all'avvio", Modifier.weight(1f), fontSize = 14.sp)
+                    Switch(checked = settings.autoUpdate, onCheckedChange = { vm.setAutoUpdate(it) })
+                }
+                OutlinedTextField(value = token, onValueChange = { token = it; vm.setGithubToken(it) },
+                    label = { Text("Token GitHub (solo se repo privato)") }, singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth())
+                TextButton(onClick = { vm.checkUpdates(silent = false) }) { Text("🔄 Controlla aggiornamenti") }
+                updateStatus?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
+                Spacer(Modifier.height(10.dp))
+
                 TextButton(onClick = { vm.clearChat(); onClose() }) { Text("🗑 Cancella conversazione") }
             }
         },
