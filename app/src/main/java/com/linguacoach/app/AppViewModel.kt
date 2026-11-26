@@ -15,6 +15,8 @@ import com.linguacoach.app.speech.Speaker
 import com.linguacoach.app.speech.SpeechManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -32,6 +34,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val error: StateFlow<String?> = _error
     fun clearError() { _error.value = null }
 
+    init {
+        // Apply the saved voice whenever it loads or changes (Speaker queues if TTS not ready yet).
+        viewModelScope.launch {
+            settings.map { it.voiceId }.distinctUntilChanged().collect { speaker.setVoice(it) }
+        }
+    }
+
     private val level: Level
         get() = runCatching { Level.valueOf(repo.current.level) }.getOrDefault(Level.B1)
 
@@ -44,6 +53,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setLevel(l: Level) = repo.updateSettings { it.copy(level = l.name) }
     fun setModel(id: String) = repo.updateSettings { it.copy(model = id) }
     fun setSpeak(on: Boolean) = repo.updateSettings { it.copy(speakReplies = on) }
+    fun setSpeakCorrections(on: Boolean) = repo.updateSettings { it.copy(speakCorrections = on) }
+    fun setVoice(id: String?) { repo.updateSettings { it.copy(voiceId = id) }; speaker.setVoice(id) }
     fun setTutorName(n: String) = repo.updateSettings { it.copy(tutorName = n.trim().ifBlank { "Alex" }) }
     fun setAvatar(base64: String?) = repo.updateSettings { it.copy(avatar = base64) }
     fun setAvatarPreset(i: Int) = repo.updateSettings { it.copy(avatar = null, avatarPreset = i) }
@@ -84,7 +95,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 val shown = (if (showUser) history else base) + tutorMsg
                 repo.setMessages(shown)
-                if (s.speakReplies) speaker.speak(reply.reply)
+                if (s.speakReplies) {
+                    // Speak the reply and, right after, a short spoken correction — like a real chat.
+                    val followUp = if (s.speakCorrections) reply.corrections.firstOrNull()?.let { c ->
+                        "Quick correction: say, ${c.fixed}. Instead of, ${c.original}."
+                    } else null
+                    speaker.speak(reply.reply, followUp)
+                }
             } catch (e: ClaudeException) {
                 repo.setMessages((if (showUser) history else base)) // drop pending
                 _error.value = e.message
@@ -95,7 +112,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun replay(text: String) { if (repo.current.speakReplies) speaker.speak(text) }
+    /** Explicit tap on the speaker icon — always speaks, ignoring the auto-read toggle. */
+    fun replay(text: String) { speaker.speak(text) }
 
     override fun onCleared() {
         speaker.shutdown()

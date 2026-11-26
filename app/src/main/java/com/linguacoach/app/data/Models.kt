@@ -52,6 +52,8 @@ data class Settings(
     val level: String = Level.B1.name,
     val model: String = "claude-opus-5-5",
     val speakReplies: Boolean = true,
+    val speakCorrections: Boolean = true,
+    val voiceId: String? = null,
     val onboarded: Boolean = false,
     val tutorName: String = "Alex",
     /** Avatar photo as a small base64 JPEG; null = use a preset. */

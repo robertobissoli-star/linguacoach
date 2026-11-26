@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddComment
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -108,9 +109,9 @@ fun ChatScreen(vm: AppViewModel) {
     Scaffold(
         topBar = {
             Surface(tonalElevation = 3.dp) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-                        TutorAvatar(settings, speaking, sizeDp = 44)
+                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                        TutorAvatar(settings, speaking, sizeDp = 60)
                     }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
@@ -124,6 +125,7 @@ fun ChatScreen(vm: AppViewModel) {
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )
                     }
+                    IconButton(onClick = { vm.clearChat() }) { Icon(Icons.Default.AddComment, "nuova conversazione") }
                     IconButton(onClick = { showSettings = true }) { Icon(Icons.Default.Settings, "impostazioni") }
                 }
             }
@@ -270,6 +272,7 @@ private fun SettingsDialog(vm: AppViewModel, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val voices by vm.speaker.voices.collectAsStateWithLifecycle()
     var name by remember { mutableStateOf(settings.tutorName) }
     var key by remember { mutableStateOf(settings.apiKey) }
 
@@ -327,6 +330,27 @@ private fun SettingsDialog(vm: AppViewModel, onClose: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Leggi le risposte ad alta voce", Modifier.weight(1f), fontSize = 14.sp)
                     Switch(checked = settings.speakReplies, onCheckedChange = { vm.setSpeak(it) })
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Leggi anche le correzioni a voce", Modifier.weight(1f), fontSize = 14.sp)
+                    Switch(checked = settings.speakCorrections, onCheckedChange = { vm.setSpeakCorrections(it) })
+                }
+                Spacer(Modifier.height(10.dp))
+
+                Text("Voce del tutor", fontWeight = FontWeight.SemiBold)
+                if (voices.isEmpty()) {
+                    Text("Nessuna voce extra trovata. Per voci più naturali installa \"Google Speech Services\" dal Play Store e scaricane le voci inglesi.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(selected = settings.voiceId == null, onClick = { vm.setVoice(null) }, label = { Text("Predefinita") })
+                        voices.take(12).forEach { v ->
+                            FilterChip(selected = settings.voiceId == v.id, onClick = { vm.setVoice(v.id) }, label = { Text(v.label) })
+                        }
+                    }
+                    TextButton(onClick = { vm.replay("Hello! This is how I sound. Let's practice English together.") }) {
+                        Text("▶ Prova la voce")
+                    }
                 }
                 Spacer(Modifier.height(10.dp))
 
